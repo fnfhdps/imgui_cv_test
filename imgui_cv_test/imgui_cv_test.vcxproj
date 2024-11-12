@@ -136,6 +136,7 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>C:\opencv\build\include;$(SolutionDir)imgui_cv_test\src\imgui;$(SolutionDir)imgui_cv_test\src\glad;$(SolutionDir)imgui_cv_test\src\glfw;$(SolutionDir)imgui_cv_test\src\stb;</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -153,6 +154,7 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>C:\opencv\build\include;$(SolutionDir)imgui_cv_test\src\imgui;$(SolutionDir)imgui_cv_test\src\glad;$(SolutionDir)imgui_cv_test\src\glfw;$(SolutionDir)imgui_cv_test\src\stb;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>

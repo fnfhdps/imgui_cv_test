@@ -1,18 +1,18 @@
-#include "./src/imgui/imgui.h"
-#include "./src/imgui/imgui_impl_glfw.h"
-#include "./src/imgui/imgui_impl_opengl3.h"
-#include <glad.h>
-
-#include <glfw3.h>
-#define STB_IMAGE_IMPLEMENTATION
-
-#include "./src/stb/stb_image.h"
-
+#include <windows.h>
 #include <string>
 using namespace std;
 
+#include <glad.h>
+#define STB_IMAGE_IMPLEMENTATION
+#include <glfw3.h>
 
+#include "./src/imgui/imgui.h"
+#include "./src/imgui/imgui_impl_glfw.h"
+#include "./src/imgui/imgui_impl_opengl3.h"
+#include "./src/stb/stb_image.h"
+#include <format>
 
+#pragma comment(lib, "Comdlg32.lib")
 
 // GLFW 초기화
 GLFWwindow* window;
@@ -58,14 +58,24 @@ void InitImGui() {
     ImGui_ImplOpenGL3_Init("#version 130");  // OpenGL 3.3 이상 버전
 }
 
-GLuint LoadTextureFromFile(const char* filename)
+GLuint LoadTextureFromFile(const wchar_t* filename)
 {
-    // 이미지 로드
     int width, height, channels;
-    unsigned char* data = stbi_load(filename, &width, &height, &channels, 0);
+
+    //string path = format("%s", filename);
+
+    // wchar_t*를 char*로 변환
+    int size_needed = WideCharToMultiByte(CP_UTF8, 0, filename, -1, NULL, 0, NULL, NULL);
+    char* cFilename = new char[size_needed];
+    WideCharToMultiByte(CP_UTF8, 0, filename, -1, cFilename, size_needed, NULL, NULL);
+    
+    unsigned char* data = stbi_load(cFilename, &width, &height, &channels, 0);
+    
+    unsigned char* res;
     if (data == nullptr)
     {
-        printf("Failed to load image: %s\n", filename);
+        printf("Failed to load image: %s\n", cFilename);
+        delete[] cFilename;
         return 0;
     }
 
@@ -85,27 +95,41 @@ GLuint LoadTextureFromFile(const char* filename)
     glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
     glGenerateMipmap(GL_TEXTURE_2D);
 
-    // 이미지 데이터 해제
     stbi_image_free(data);
 
-    // 이미지 크기 저장
     g_ImageWidth = width;
     g_ImageHeight = height;
+
+    delete[] cFilename;
 
     return texture;
 }
 
-void imageLoad(const char* path) {
+void imageLoad() {
     static bool showImage = false;
 
     ImGui::Begin("Image Viewer"); // 윈도우 시작
     ImGui::Text("Hello, ImGui!");
+
     if (ImGui::Button("Load Image")) {
-        if (!g_TextureLoaded) {
-            g_TextureID = LoadTextureFromFile(path);
+    
+        // 파일 선택 대화 상자 열기
+        wchar_t filename[MAX_PATH] = L"";
+        OPENFILENAME ofn;
+        ZeroMemory(&ofn, sizeof(ofn));
+        ofn.lStructSize = sizeof(ofn);
+        ofn.hwndOwner = NULL; // 소유자 윈도우 핸들
+        ofn.lpstrFile = filename;
+        ofn.nMaxFile = sizeof(filename) / sizeof(wchar_t);
+        ofn.lpstrFilter = L"Image Files\0*.bmp;*.png;*.jpg;*.jpeg\0All Files\0*.*\0";
+        ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+
+        if (GetOpenFileName(&ofn)) {
+
+            g_TextureID = LoadTextureFromFile(filename);
             g_TextureLoaded = (g_TextureID != 0);
+            showImage = !showImage;
         }
-        showImage = !showImage;
     }
 
     // 이미지가 로드되었다면 표시
@@ -124,8 +148,7 @@ void Render() {
     ImGui::NewFrame();
 
     // 2. UI 구성
-    const char *filePath = "D:\\stick.bmp";
-    imageLoad(filePath);
+    imageLoad();
 
     // 3. 렌더링 준비 및 실행, ui 커맨드 생성
     ImGui::Render();
@@ -168,6 +191,7 @@ int main() {
         // 렌더링
         Render();
     }
+
 
     // 종료 처리
     ImGui_ImplOpenGL3_Shutdown();
