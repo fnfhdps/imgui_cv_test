@@ -1,21 +1,16 @@
-#include <windows.h>
-#include <string>
-using namespace std;
-
-#include <glad.h>
-#define STB_IMAGE_IMPLEMENTATION
-#include <glfw3.h>
-
-#include "./src/imgui/imgui.h"
-#include "./src/imgui/imgui_impl_glfw.h"
-#include "./src/imgui/imgui_impl_opengl3.h"
+#include "stdafx.h"
+#include "UIManager.h"
 #include "./src/stb/stb_image.h"
-#include <format>
 
-#pragma comment(lib, "Comdlg32.lib")
+static void glfw_error_callback(int error, const char* description)
+{
+    fprintf(stderr, "GLFW Error %d: %s\n", error, description);
+}
 
 // GLFW 초기화
 GLFWwindow* window;
+
+cv::VideoCapture cap;
 
 // Main loop
 bool show_demo_window = true;
@@ -27,6 +22,10 @@ GLuint g_TextureID = 0;
 bool g_TextureLoaded = false;
 int g_ImageWidth = 0;
 int g_ImageHeight = 0;
+bool showMessage = false; // 메시지 박스 표시 여부
+std::string messageText; // 메시지 박스에 표시할 메시지
+
+UIManager uiManager;
 
 bool InitWindow() {
 
@@ -50,8 +49,14 @@ bool InitWindow() {
 
 // ImGui 초기화
 void InitImGui() {
+    // Setup Dear ImGui context
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+
+    // Setup Dear ImGui style
     ImGui::StyleColorsDark();
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
@@ -62,8 +67,6 @@ GLuint LoadTextureFromFile(const wchar_t* filename)
 {
     int width, height, channels;
 
-    //string path = format("%s", filename);
-
     // wchar_t*를 char*로 변환
     int size_needed = WideCharToMultiByte(CP_UTF8, 0, filename, -1, NULL, 0, NULL, NULL);
     char* cFilename = new char[size_needed];
@@ -71,11 +74,10 @@ GLuint LoadTextureFromFile(const wchar_t* filename)
     
     unsigned char* data = stbi_load(cFilename, &width, &height, &channels, 0);
     
-    unsigned char* res;
     if (data == nullptr)
     {
-        printf("Failed to load image: %s\n", cFilename);
-        delete[] cFilename;
+        uiManager.SetMessage(string(cFilename));
+        uiManager.SetShowMessage(true);
         return 0;
     }
 
@@ -105,14 +107,37 @@ GLuint LoadTextureFromFile(const wchar_t* filename)
     return texture;
 }
 
+// 비디오 프레임을 텍스처로 변환
+void UpdateTexture() {
+    if (ImGui::Button("Load Video")) {
+        cv::Mat frame;
+        if (cap.read(frame)) {
+            // OpenCV의 BGR 이미지를 RGB로 변환
+            cv::cvtColor(frame, frame, cv::COLOR_BGR2RGB);
+
+            // 텍스처 생성
+            if (!g_TextureLoaded) {
+                glGenTextures(1, &g_TextureID);
+                g_TextureLoaded = true;
+            }
+
+            glBindTexture(GL_TEXTURE_2D, g_TextureID);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, frame.cols, frame.rows, 0, GL_RGB, GL_UNSIGNED_BYTE, frame.data);
+            glGenerateMipmap(GL_TEXTURE_2D);
+        }
+        else {
+            // fail msg
+            uiManager.SetMessage("Failed to capture video frame.");
+            uiManager.SetShowMessage(true);
+        }
+    }
+}
+
+// 이미지 로드 UI 함수
 void imageLoad() {
-    static bool showImage = false;
-
-    ImGui::Begin("Image Viewer"); // 윈도우 시작
-    ImGui::Text("Hello, ImGui!");
-
-    if (ImGui::Button("Load Image")) {
+    //ImGui::Begin("MainView", nullptr, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize);
     
+    if (ImGui::Button("Load Image")) {
         // 파일 선택 대화 상자 열기
         wchar_t filename[MAX_PATH] = L"";
         OPENFILENAME ofn;
@@ -125,17 +150,28 @@ void imageLoad() {
         ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
 
         if (GetOpenFileName(&ofn)) {
-
             g_TextureID = LoadTextureFromFile(filename);
             g_TextureLoaded = (g_TextureID != 0);
-            showImage = !showImage;
-        }
+        } 
     }
 
     // 이미지가 로드되었다면 표시
-    if (g_TextureLoaded && g_TextureID != 0 && showImage) {
+    if (g_TextureLoaded && g_TextureID != 0) {
         ImGui::Image((void*)(intptr_t)g_TextureID, ImVec2(g_ImageWidth, g_ImageHeight));
     }
+    //ImGui::End(); // 윈도우 종료
+}
+
+void mainFrame() {
+    // 창의 크기와 위치 설정
+    ImGui::SetNextWindowSize(ImVec2(1280, 720), ImGuiCond_FirstUseEver); // 초기 크기 설정
+    ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_FirstUseEver); // 초기 위치 설정
+
+    ImGui::Begin("mainView", nullptr, ImGuiWindowFlags_NoCollapse); // 닫기 버튼 및 크기 조정 비활성화
+    imageLoad();
+    UpdateTexture();
+    uiManager.Render();
+
     ImGui::End(); // 윈도우 종료
 }
 
@@ -148,7 +184,7 @@ void Render() {
     ImGui::NewFrame();
 
     // 2. UI 구성
-    imageLoad();
+    mainFrame();
 
     // 3. 렌더링 준비 및 실행, ui 커맨드 생성
     ImGui::Render();
@@ -171,15 +207,12 @@ void Render() {
 // 4. main roop에서 randering and events
 int main() {
 
+    glfwSetErrorCallback(glfw_error_callback);
     // 윈도우와 OpenGL 초기화
-    if (!InitWindow()) {
-        return -1;
-    }
+    if (!InitWindow()) return -1;
 
     // GLAD 초기화
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-        return -1;
-    }
+    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) return -1;
 
     // ImGui 초기화
     InitImGui();
@@ -187,11 +220,13 @@ int main() {
     // 메인 루프
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents(); // 이벤트 처리
-
+        if (glfwGetWindowAttrib(window, GLFW_ICONIFIED) != 0) {
+            ImGui_ImplGlfw_Sleep(10);
+            continue;
+        }
         // 렌더링
         Render();
     }
-
 
     // 종료 처리
     ImGui_ImplOpenGL3_Shutdown();
