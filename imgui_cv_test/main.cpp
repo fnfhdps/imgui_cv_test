@@ -7,14 +7,7 @@ static void glfw_error_callback(int error, const char* description)
     fprintf(stderr, "GLFW Error %d: %s\n", error, description);
 }
 
-// GLFW 초기화
 GLFWwindow* window;
-
-cv::VideoCapture cap;
-
-// Main loop
-bool show_demo_window = true;
-bool show_another_window = false;
 ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
 // 전역 변수로 텍스처 ID 추가
@@ -22,10 +15,17 @@ GLuint g_TextureID = 0;
 bool g_TextureLoaded = false;
 int g_ImageWidth = 0;
 int g_ImageHeight = 0;
+
+UIManager uiManager;
 bool showMessage = false; // 메시지 박스 표시 여부
 std::string messageText; // 메시지 박스에 표시할 메시지
 
-UIManager uiManager;
+// video view
+atomic<bool> isRunning(true);
+bool show_video_window = true;
+cv::VideoCapture cap;
+cv::Mat frame;
+mutex frameMutex;
 
 bool InitWindow() {
 
@@ -63,9 +63,8 @@ void InitImGui() {
     ImGui_ImplOpenGL3_Init("#version 130");  // OpenGL 3.3 이상 버전
 }
 
-GLuint LoadTextureFromFile(const wchar_t* filename)
-{
-    int width, height, channels;
+GLuint UpdateTextureImage(const wchar_t* filename) {
+    int width = 0, height = 0, channels = 0;
 
     // wchar_t*를 char*로 변환
     int size_needed = WideCharToMultiByte(CP_UTF8, 0, filename, -1, NULL, 0, NULL, NULL);
@@ -73,9 +72,7 @@ GLuint LoadTextureFromFile(const wchar_t* filename)
     WideCharToMultiByte(CP_UTF8, 0, filename, -1, cFilename, size_needed, NULL, NULL);
     
     unsigned char* data = stbi_load(cFilename, &width, &height, &channels, 0);
-    
-    if (data == nullptr)
-    {
+    if (data == nullptr) {
         uiManager.SetMessage(string(cFilename));
         uiManager.SetShowMessage(true);
         return 0;
@@ -108,68 +105,99 @@ GLuint LoadTextureFromFile(const wchar_t* filename)
 }
 
 // 비디오 프레임을 텍스처로 변환
-void UpdateTexture() {
-    if (ImGui::Button("Load Video")) {
-        cv::Mat frame;
-        if (cap.read(frame)) {
-            // OpenCV의 BGR 이미지를 RGB로 변환
-            cv::cvtColor(frame, frame, cv::COLOR_BGR2RGB);
+void UpdateTextureVideo() {
+    //GLuint texture;
+    cv::Mat tempFrame;
+    //cap.open(0);
 
-            // 텍스처 생성
-            if (!g_TextureLoaded) {
-                glGenTextures(1, &g_TextureID);
-                g_TextureLoaded = true;
-            }
+    while (isRunning) {
+        cap.release();
+        cap >> tempFrame;
 
-            glBindTexture(GL_TEXTURE_2D, g_TextureID);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, frame.cols, frame.rows, 0, GL_RGB, GL_UNSIGNED_BYTE, frame.data);
-            glGenerateMipmap(GL_TEXTURE_2D);
-        }
-        else {
-            // fail msg
+        if (tempFrame.empty()) {
             uiManager.SetMessage("Failed to capture video frame.");
             uiManager.SetShowMessage(true);
+            g_TextureLoaded = false;
+            break;
         }
+        std::lock_guard<std::mutex> lock(frameMutex);
+        frame = tempFrame.clone();
     }
+    //return texture;
 }
 
 // 이미지 로드 UI 함수
-void imageLoad() {
-    //ImGui::Begin("MainView", nullptr, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize);
-    
-    if (ImGui::Button("Load Image")) {
-        // 파일 선택 대화 상자 열기
-        wchar_t filename[MAX_PATH] = L"";
-        OPENFILENAME ofn;
-        ZeroMemory(&ofn, sizeof(ofn));
-        ofn.lStructSize = sizeof(ofn);
-        ofn.hwndOwner = NULL; // 소유자 윈도우 핸들
-        ofn.lpstrFile = filename;
-        ofn.nMaxFile = sizeof(filename) / sizeof(wchar_t);
-        ofn.lpstrFilter = L"Image Files\0*.bmp;*.png;*.jpg;*.jpeg\0All Files\0*.*\0";
-        ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+void ImageLoad() {
+    // 파일 선택 대화 상자 열기
+    wchar_t filename[MAX_PATH] = L"";
+    OPENFILENAME ofn;
+    ZeroMemory(&ofn, sizeof(ofn));
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = NULL;
+    ofn.lpstrFile = filename;
+    ofn.nMaxFile = sizeof(filename) / sizeof(wchar_t);
+    ofn.lpstrFilter = L"Image Files\0*.bmp;*.png;*.jpg;*.jpeg\0All Files\0*.*\0";
+    ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
 
-        if (GetOpenFileName(&ofn)) {
-            g_TextureID = LoadTextureFromFile(filename);
-            g_TextureLoaded = (g_TextureID != 0);
-        } 
+    if (GetOpenFileName(&ofn)) {
+        g_TextureID = UpdateTextureImage(filename);
+        g_TextureLoaded = (g_TextureID != 0);
     }
-
-    // 이미지가 로드되었다면 표시
-    if (g_TextureLoaded && g_TextureID != 0) {
-        ImGui::Image((void*)(intptr_t)g_TextureID, ImVec2(g_ImageWidth, g_ImageHeight));
-    }
-    //ImGui::End(); // 윈도우 종료
 }
 
-void mainFrame() {
+void VideoFrame() {
+    ImGui::SetNextWindowSize(ImVec2(700, 500), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(1500, 0), ImGuiCond_FirstUseEver);
+
+    ImGui::Begin("CamView");
+    cap.open(0);
+    if (cap.isOpened()) {
+    }
+    g_TextureID = UpdateTextureVideo();
+
+    if
+    // BGR(OpenCV) -> RGB(OpenGL) 변환
+    cv::cvtColor(frame, frame, cv::COLOR_BGR2RGB);
+
+    // OpenGL 텍스처 초기화
+    glGenTextures(1, &g_TextureID);
+    glEnable(GL_TEXTURE_2D);
+
+    glBindTexture(GL_TEXTURE_2D, g_TextureID);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, frame.cols, frame.rows, 0, GL_RGB, GL_UNSIGNED_BYTE, frame.data);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    // CPU 사용량을 줄이기 위해 약간의 대기
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+
+    if (cap.isOpened() && !frame.empty()) {
+        ImGui::Image((void*)(intptr_t)g_TextureID, ImVec2(frame.cols, frame.rows));
+    }
+
+    uiManager.Render();
+    ImGui::End();
+}
+
+void MainFrame() {
     // 창의 크기와 위치 설정
     ImGui::SetNextWindowSize(ImVec2(1280, 720), ImGuiCond_FirstUseEver); // 초기 크기 설정
     ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_FirstUseEver); // 초기 위치 설정
 
-    ImGui::Begin("mainView", nullptr, ImGuiWindowFlags_NoCollapse); // 닫기 버튼 및 크기 조정 비활성화
-    imageLoad();
-    UpdateTexture();
+    ImGui::Begin("MainView", nullptr, ImGuiWindowFlags_NoCollapse); // 닫기 버튼 및 크기 조정 비활성화
+    
+    if (ImGui::Button("Load Image")) {
+        ImageLoad();
+    }
+    // 이미지 화면 표시
+    if (g_TextureLoaded && g_TextureID != 0) {
+        ImGui::Image((void*)(intptr_t)g_TextureID, ImVec2(g_ImageWidth, g_ImageHeight));
+    }
+
+    if (ImGui::Button("Load Video")) {
+        show_video_window = !show_video_window;
+    }
     uiManager.Render();
 
     ImGui::End(); // 윈도우 종료
@@ -184,7 +212,12 @@ void Render() {
     ImGui::NewFrame();
 
     // 2. UI 구성
-    mainFrame();
+    MainFrame();
+    if (show_video_window) {
+        VideoFrame();
+    }
+
+
 
     // 3. 렌더링 준비 및 실행, ui 커맨드 생성
     ImGui::Render();
@@ -197,8 +230,6 @@ void Render() {
     // 5. 더블 버퍼링 스왑, 깜박임 방지
     glfwSwapBuffers(window);
 }
-
-
 
 // 실행 순서
 // 1. GLFW로 윈도우 init -> OpenGL context create
@@ -217,6 +248,9 @@ int main() {
     // ImGui 초기화
     InitImGui();
 
+    // 비디오 데이터 로드 스레드 생성
+    std::thread videoThread(UpdateTextureVideo, std::ref(cap));
+
     // 메인 루프
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents(); // 이벤트 처리
@@ -229,6 +263,9 @@ int main() {
     }
 
     // 종료 처리
+    isRunning = false; // 비디오 스레드 종료 플래그 설정
+    videoThread.join(); // 스레드 종료 대기
+
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();

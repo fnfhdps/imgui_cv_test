@@ -18,6 +18,9 @@
 #include <string>
 #include <stdio.h>
 #include <format>
+#include <thread>
+#include <atomic>
+#include <mutex>
 using namespace std;
 
 #pragma comment(lib, "Comdlg32.lib")
