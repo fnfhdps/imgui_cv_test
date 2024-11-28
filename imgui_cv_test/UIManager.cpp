@@ -19,7 +19,7 @@ void UIManager::ShowPopup(const string& title, const string& msg)
 
 void UIManager::Render()
 {
-    ShowPopup("error message: ", messageText);
+    ShowPopup("error message!", messageText);
 }
 
 void UIManager::SetMessage(const string& msg)
