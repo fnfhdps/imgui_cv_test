@@ -22,7 +22,6 @@ ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
 // 전역 변수로 텍스처 ID 추가
 GLuint g_ImgTextureID = 0;
-bool g_TextureLoaded = false;
 int g_ImageWidth = 0;
 int g_ImageHeight = 0;
 
@@ -36,6 +35,7 @@ bool show_video_window = false;
 cv::VideoCapture cap;
 cv::Mat realFrame;
 mutex frameMutex;
+GLuint g_VideoTextureID = 0;
 
 // video recoding
 bool isRecording = false;
@@ -98,17 +98,17 @@ void UpdateTextureImage(const wchar_t* filename) {
         return;
     }
 
-    // 텍스처 생성
-    GLuint texture;
-    glGenTextures(1, &texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
+    if (g_ImgTextureID == 0) {
+        // 텍스처 생성
+        glGenTextures(1, &g_ImgTextureID);
+        glBindTexture(GL_TEXTURE_2D, g_ImgTextureID);
 
-    // 텍스처 필터링 및 랩 설정
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
+        // 텍스처 필터링 및 랩 설정
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    }
     // 텍스처 데이터 업로드
     GLenum format = (channels == 4) ? GL_RGBA : GL_RGB;
     glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
@@ -119,11 +119,7 @@ void UpdateTextureImage(const wchar_t* filename) {
     g_ImageWidth = width;
     g_ImageHeight = height;
 
-    g_ImgTextureID = texture;
-
-    glDeleteTextures(1, &texture);
     delete[] cFilename;
-
 }
 
 // 이미지 로드 UI 함수
@@ -149,6 +145,7 @@ void RecordVideo(cv::Mat TempFrame, string path) {
 
     if (isRecording) {
         if (!writer.isOpened()) {
+            // format set
             int fourcc = cv::VideoWriter::fourcc('M', 'J', 'P', 'G'); // 코덱 선택 (예: MJPG)
             double fps = 60.0;
             cv::Size frameSize(640, 480);
@@ -162,27 +159,26 @@ void RecordVideo(cv::Mat TempFrame, string path) {
             }
         }
         else {
-            if (TempFrame.empty()) return;
-            TempFrame = realFrame.clone();
             writer.write(TempFrame);
         }
     }
     else {
-        writer.release(); // 저장 종료
+        writer.release();
     }
 }
 
 // 비디오 프레임을 텍스처로 변환
 void UpdateTextureVideo(cv::VideoCapture& cap) {
 
+
     cv::Mat newFrame;
 
     while (isRunning) {
         cap >> newFrame;
-        if (newFrame.empty()) break;
+        if (newFrame.empty()) continue;
 
         std::lock_guard<std::mutex> lock(frameMutex);
-        realFrame = newFrame.clone(); // realFrame 업데이트
+        realFrame = newFrame.clone();
         RecordVideo(realFrame, "D:\\web_cam_test.avi");
     }
 }
@@ -196,45 +192,46 @@ void VideoFrame() {
     cv::Mat newFrame;
 
     std::lock_guard<std::mutex> lock(frameMutex); // 스레드 안전성을 위해 잠금
-
+    
     if (!cap.isOpened()) {
         uiManager.SetMessage("Failed to capture video frame.");
         uiManager.SetShowMessage(true);
-        return; // 비디오 캡처가 열리지 않은 경우 종료
+        show_video_window = 0;
+        return;
     }
 
     if (!realFrame.empty()) {
-        newFrame = realFrame.clone(); // realFrame이 비어있지 않은 경우에만 복사
+        newFrame = realFrame.clone();
     }
     else {
         uiManager.SetMessage("No frame available.");
         uiManager.SetShowMessage(true);
-        return; // realFrame이 비어있으면 종료
+        return;
     }
 
     // BGR(OpenCV) -> RGB(OpenGL) 변환
     cv::cvtColor(newFrame, newFrame, cv::COLOR_BGR2RGB);
 
-    glGenTextures(1, &textureID);
-    glBindTexture(GL_TEXTURE_2D, textureID);
+    if (g_VideoTextureID == 0) {
+        glGenTextures(1, &g_VideoTextureID);
+        glBindTexture(GL_TEXTURE_2D, g_VideoTextureID);
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    }
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, newFrame.cols, newFrame.rows, 0, GL_RGB, GL_UNSIGNED_BYTE, newFrame.data);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glGenerateMipmap(GL_TEXTURE_2D);
 
     // CPU 사용량을 줄이기 위해 약간의 대기
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
     ImGui::Begin("CamView");
     if (cap.isOpened() && !newFrame.empty()) {
-        ImGui::Image((void*)(intptr_t)textureID, ImVec2(newFrame.cols, newFrame.rows));
+        ImGui::Image((void*)(intptr_t)g_VideoTextureID, ImVec2(newFrame.cols, newFrame.rows));
     }
 
-    if (!show_video_window) {
-        glDeleteTextures(1, &textureID); // 더 이상 텍스처를 사용하지 않을 때 삭제
-        textureID = 0; // 안전을 위해 0으로 초기화
-    }
-
-    newFrame.release();
     uiManager.Render();
     ImGui::End();
 }
@@ -259,28 +256,31 @@ void MainFrame() {
         show_video_window = !show_video_window;
 
         if (show_video_window) {
-            if (!cap.isOpened()) {
-                if (cap.open(2)) { // 비디오 캡처 시작
-                    // 비디오 데이터 로드 스레드 생성
-                    isRunning = true; // 비디오 스레드 실행 플래그 설정
+            if (cap.open(1)) { // 비디오 캡처 시작
+                if (cap.isOpened()) {
+                    // 비디오 스레드 생성
+                    isRunning = true;
                     videoThread = std::thread(UpdateTextureVideo, std::ref(cap));
-                    videoThread.detach(); // 스레드를 분리하여 메인 스레드와 독립적으로 실행
                 }
-                if (!cap.isOpened()) {
+                else {
                     uiManager.SetMessage("Failed to open video capture.");
                     uiManager.SetShowMessage(true);
                     return;
                 }
             }
-        } else {
-            isRunning = false; // 비디오 스레드 종료 플래그 설정
-            cap.release(); // 비디오 캡처 종료
-            //if (videoThread.joinable()) {
-            //    videoThread.join(); // 스레드 종료 대기
+        }
+        else {
+            glDeleteTextures(1, &g_VideoTextureID);
+            g_VideoTextureID = 0;
+            isRunning = false; 
+            cap.release();
+            if (videoThread.joinable()) {
+                videoThread.join();
             }
+        }
     }
 
-    if (ImGui::Button("Video Recorde")) {
+    if (ImGui::Button("Video Record")) {
         //if (show_video_window) isRecording = !isRecording;
         if (cap.isOpened()) isRecording = !isRecording;
     }
@@ -320,10 +320,9 @@ void Render() {
 // 1. GLFW로 윈도우 init -> OpenGL context create
 // 2. GLAD init (OpenGL fn 사용 전)
 // 3. ImGui init
-// 4. main roop에서 randering and events
+// 4. main roop에서 randering and events 
 int main() {
     _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
-    _CrtSetBreakAlloc(6016);
 
     glfwSetErrorCallback(glfw_error_callback);
     // 윈도우와 OpenGL 초기화
@@ -334,10 +333,6 @@ int main() {
 
     // ImGui 초기화
     InitImGui();
-
-    // cap.open(2);
-    // 비디오 데이터 로드 스레드 생성
-    // std::thread videoThread(UpdateTextureVideo, std::ref(cap));
 
     // 메인 루프
     while (!glfwWindowShouldClose(window)) {
@@ -350,13 +345,15 @@ int main() {
         Render();
     }
 
-    // writer와 cap 해제
+    glDeleteTextures(1, &g_ImgTextureID);
+    glDeleteTextures(1, &g_VideoTextureID);
+
+    // 자원 해제
     writer.release(); // 비디오 작성을 종료
     cap.release(); // 비디오 캡처 종료
-
-    // 종료 처리
-    //isRunning = false; // 비디오 스레드 종료 플래그 설정
-    //videoThread.join(); // 스레드 종료 대기
+    
+    isRunning = false; // 비디오 스레드 종료 플래그 설정
+    videoThread.join(); // 스레드 종료 대기
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
@@ -365,6 +362,5 @@ int main() {
     glfwDestroyWindow(window);
     glfwTerminate();
 
-    //_CrtDumpMemoryLeaks();
     return 0;
 }
