@@ -3,7 +3,6 @@
 #include "./src/stb/stb_image.h"
 
 #define _CRTDBG_MAP_ALLOC
-#include <stdlib.h>
 #include <cstdlib>
 #include <crtdbg.h>
 
@@ -41,8 +40,17 @@ GLuint g_VideoTextureID = 0;
 bool isRecording = false;
 cv::VideoWriter writer;
 
-// 전역 변수 추가
+// 비디오 스레드 관련
 std::thread videoThread; // 비디오 캡처 스레드
+const int camCnt = 2;
+struct CameraData {
+    cv::VideoCapture cap;
+    cv::Mat frame;
+    std::mutex frameMutex;
+    GLuint textureID = 0;
+};
+std::vector<CameraData> cameras; // 카메라 데이터 저장
+
 
 bool InitWindow() {
 
@@ -170,7 +178,6 @@ void RecordVideo(cv::Mat TempFrame, string path) {
 // 비디오 프레임을 텍스처로 변환
 void UpdateTextureVideo(cv::VideoCapture& cap) {
 
-
     cv::Mat newFrame;
 
     while (isRunning) {
@@ -256,18 +263,17 @@ void MainFrame() {
         show_video_window = !show_video_window;
 
         if (show_video_window) {
-            if (cap.open(1)) { // 비디오 캡처 시작
-                if (cap.isOpened()) {
-                    // 비디오 스레드 생성
-                    isRunning = true;
-                    videoThread = std::thread(UpdateTextureVideo, std::ref(cap));
-                }
-                else {
-                    uiManager.SetMessage("Failed to open video capture.");
-                    uiManager.SetShowMessage(true);
-                    return;
-                }
-            }
+            //if (cap.open(1)) { // 비디오 캡처 시작
+            //    if (cap.isOpened()) {
+            //        // 비디오 스레드 생성
+            //        isRunning = true;
+            //        videoThread = std::thread(UpdateTextureVideo, std::ref(cap));
+            //    }
+            //    else {
+                    //uiManager.SetMessage("Failed to open video capture.");
+                    //uiManager.SetShowMessage(true);
+                //}
+            //}
         }
         else {
             glDeleteTextures(1, &g_VideoTextureID);
@@ -333,6 +339,14 @@ int main() {
 
     // ImGui 초기화
     InitImGui();
+
+    ThreadPool pool(camCnt);
+    for (int i = 0; i < camCnt; i++)
+    {
+        pool.enqueue([&, i] {UpdateTextureVideo(cameras[i])});
+    }
+    //cap.open(1);
+    //videoThread = std::thread(UpdateTextureVideo, std::ref(cap));
 
     // 메인 루프
     while (!glfwWindowShouldClose(window)) {

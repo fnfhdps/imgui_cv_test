@@ -33,6 +33,7 @@
     <ClCompile Include="src\imgui\imgui_widgets.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="ThreadPool.h" />
     <ClInclude Include="UIManager.h" />
     <ClInclude Include="src\glad\glad.h" />
     <ClInclude Include="src\glad\khrplatform.h" />

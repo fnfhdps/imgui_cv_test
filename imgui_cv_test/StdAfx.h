@@ -7,6 +7,7 @@
 #include "./src/imgui/imgui_impl_glfw.h"
 #include "./src/imgui/imgui_impl_opengl3.h"
 #include "./src/stb/stb_image.h"
+#include "./ThreadPool.h"
 
 #include <glad.h>
 #define STB_IMAGE_IMPLEMENTATION
