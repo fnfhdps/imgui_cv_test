@@ -1,5 +1,10 @@
 #pragma once
 #include "stdafx.h"
+#include <vector>
+#include <thread>
+#include <mutex>
+#include <queue>
+#include <functional>
 
 class ThreadPool {
     std::vector<std::thread> workers;            // 워커 스레드 리스트
@@ -9,6 +14,34 @@ class ThreadPool {
     std::atomic<bool> stop;                      // 스레드 풀 종료 플래그
 
 public:
+    // 기본 생성자
+    ThreadPool() : stop(false) {
+        // 기본 스레드 수 설정
+        size_t threads = std::thread::hardware_concurrency(); // 시스템의 하드웨어 스레드 수를 가져옴
+        for (size_t i = 0; i < threads; ++i) {
+            workers.emplace_back([this] {
+                while (true) {
+                    std::function<void()> task;
+
+                    {
+                        std::unique_lock<std::mutex> lock(this->queueMutex);
+                        this->condition.wait(lock, [this] {
+                            return this->stop || !this->tasks.empty();
+                            });
+
+                        if (this->stop && this->tasks.empty())
+                            return;
+
+                        task = std::move(this->tasks.front());
+                        this->tasks.pop();
+                    }
+
+                    task(); // 작업 실행
+                }
+                });
+        }
+    }
+
     // 생성자: 스레드 워커를 threads 개수만큼 생성
     ThreadPool(size_t threads) : stop(false) {
         for (size_t i = 0; i < threads; ++i) {

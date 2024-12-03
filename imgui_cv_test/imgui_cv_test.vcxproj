@@ -19,6 +19,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="CameraHandler.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="UIManager.cpp" />
     <ClCompile Include="src\glad\glad.c" />
@@ -33,6 +34,7 @@
     <ClCompile Include="src\imgui\imgui_widgets.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="CameraHandler.h" />
     <ClInclude Include="ThreadPool.h" />
     <ClInclude Include="UIManager.h" />
     <ClInclude Include="src\glad\glad.h" />
@@ -141,6 +143,9 @@
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>C:\opencv\build\include;$(SolutionDir)imgui_cv_test\src\imgui;$(SolutionDir)imgui_cv_test\src\glad;$(SolutionDir)imgui_cv_test\src\glfw;$(SolutionDir)imgui_cv_test\src\stb;</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <MinimalRebuild>false</MinimalRebuild>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>

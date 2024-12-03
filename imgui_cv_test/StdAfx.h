@@ -3,25 +3,18 @@
 
 #pragma once
 
-#include "./src/imgui/imgui.h"
-#include "./src/imgui/imgui_impl_glfw.h"
-#include "./src/imgui/imgui_impl_opengl3.h"
-#include "./src/stb/stb_image.h"
-#include "./ThreadPool.h"
-
-#include <glad.h>
-#define STB_IMAGE_IMPLEMENTATION
-#include <glfw3.h>
-
-#include <opencv2/opencv.hpp>
-
-#include <windows.h>
+#include <Windows.h>
 #include <string>
-#include <stdio.h>
-#include <format>
 #include <thread>
-#include <atomic>
 #include <mutex>
+#include <vector>
+#include <format>
+#include <atomic>
+#include <iomanip>
+#include <ctime>
+#include <stdio.h>
 using namespace std;
+
+# define CAMERA_CNT 2
 
 #pragma comment(lib, "Comdlg32.lib")
